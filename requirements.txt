@@ -1,0 +1,4 @@
+# No external dependencies.
+# The app uses only the Python standard library, including tkinter.
+# tkinter is not installable with pip; it must be included in the Python
+# installation used to create the virtual environment.
