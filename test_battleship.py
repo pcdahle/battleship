@@ -1,6 +1,7 @@
 import unittest
 
-from battleship import CellState, Pal17Engine, ShotView
+from benchmark import run_benchmark
+from battleship import CellState, HeadlessMatch, Pal17Engine, PlayerEngine, ShotView
 
 
 def make_view(rows, cols, states=None):
@@ -53,6 +54,97 @@ class Pal17EngineTests(unittest.TestCase):
         self.assertNotIn((0, 1), scores)
         self.assertNotIn((1, 0), scores)
         self.assertIn((3, 3), scores)
+
+
+class RecordingEngine(PlayerEngine):
+    name = "Recording"
+
+    def __init__(self):
+        self.views = []
+
+    def choose_shot(self, view):
+        self.views.append(view)
+        return view.available_targets()[0]
+
+
+class HeadlessMatchTests(unittest.TestCase):
+    def test_headless_match_finishes_without_ui(self):
+        result = HeadlessMatch(
+            rows=5,
+            cols=5,
+            fleet=[3, 2],
+            engine_a=Pal17Engine(seed=1),
+            engine_b=Pal17Engine(seed=2),
+            first_player="a",
+            seed=3,
+        ).play()
+
+        self.assertIn(result.winner, {"a", "b"})
+        self.assertGreater(result.winner_shots, 0)
+        self.assertEqual(result.total_shots, result.winner_shots + result.loser_shots)
+
+    def test_engines_only_receive_public_shot_view(self):
+        engine_a = RecordingEngine()
+        engine_b = RecordingEngine()
+
+        HeadlessMatch(
+            rows=5,
+            cols=5,
+            fleet=[3, 2],
+            engine_a=engine_a,
+            engine_b=engine_b,
+            first_player="a",
+            seed=4,
+        ).play()
+
+        self.assertTrue(engine_a.views)
+        self.assertTrue(engine_b.views)
+        for view in engine_a.views + engine_b.views:
+            self.assertIsInstance(view, ShotView)
+            self.assertFalse(hasattr(view, "ship_grid"))
+            self.assertFalse(hasattr(view, "ships"))
+
+    def test_benchmark_alternates_first_player(self):
+        first_players = []
+
+        run_benchmark(
+            games=4,
+            rows=5,
+            cols=5,
+            fleet=[3, 2],
+            engine_a_name="random",
+            engine_b_name="random",
+            seed=5,
+            start_policy="alternate",
+            result_hook=lambda result: first_players.append(result.first_player),
+        )
+
+        self.assertEqual(first_players, ["a", "b", "a", "b"])
+
+    def test_benchmark_seed_is_reproducible(self):
+        first = run_benchmark(
+            games=5,
+            rows=5,
+            cols=5,
+            fleet=[3, 2],
+            engine_a_name="pal17",
+            engine_b_name="random",
+            seed=6,
+            start_policy="alternate",
+        )
+        second = run_benchmark(
+            games=5,
+            rows=5,
+            cols=5,
+            fleet=[3, 2],
+            engine_a_name="pal17",
+            engine_b_name="random",
+            seed=6,
+            start_policy="alternate",
+        )
+
+        self.assertEqual(first.wins, second.wins)
+        self.assertEqual(first.winner_shots, second.winner_shots)
 
 
 if __name__ == "__main__":

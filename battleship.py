@@ -37,6 +37,16 @@ class ShotResult:
         return self.sunk_ship_id is not None
 
 
+@dataclass(frozen=True)
+class MatchResult:
+    winner: str
+    loser: str
+    winner_shots: int
+    loser_shots: int
+    total_shots: int
+    first_player: str
+
+
 class ShotView:
     """Read-only information an engine may use when choosing its next shot."""
 
@@ -202,6 +212,82 @@ class RandomEngine(PlayerEngine):
         if not targets:
             raise RuntimeError("No available targets left.")
         return self.rng.choice(targets)
+
+
+class HeadlessMatch:
+    """Runs one machine-vs-machine game without UI, delays, or Tkinter."""
+
+    def __init__(
+        self,
+        rows: int,
+        cols: int,
+        fleet: Iterable[int],
+        engine_a: PlayerEngine,
+        engine_b: PlayerEngine,
+        first_player: str = "a",
+        seed: int | None = None,
+    ):
+        if first_player not in ("a", "b"):
+            raise ValueError("first_player must be 'a' or 'b'.")
+
+        fleet_list = list(fleet)
+        board_rng = random.Random(seed)
+        self.rows = rows
+        self.cols = cols
+        self.fleet = fleet_list
+        self.engine_a = engine_a
+        self.engine_b = engine_b
+        self.board_a = Board(rows, cols, fleet_list, seed=board_rng.randrange(2**32))
+        self.board_b = Board(rows, cols, fleet_list, seed=board_rng.randrange(2**32))
+        self.turn = first_player
+        self.first_player = first_player
+        self.shots_a = 0
+        self.shots_b = 0
+
+        self.engine_a.new_game(rows, cols, fleet_list)
+        self.engine_b.new_game(rows, cols, fleet_list)
+
+    def play(self) -> MatchResult:
+        while True:
+            if self.turn == "a":
+                if self._take_turn(self.engine_a, self.board_b):
+                    return MatchResult(
+                        winner="a",
+                        loser="b",
+                        winner_shots=self.shots_a,
+                        loser_shots=self.shots_b,
+                        total_shots=self.shots_a + self.shots_b,
+                        first_player=self.first_player,
+                    )
+                self.turn = "b"
+            else:
+                if self._take_turn(self.engine_b, self.board_a):
+                    return MatchResult(
+                        winner="b",
+                        loser="a",
+                        winner_shots=self.shots_b,
+                        loser_shots=self.shots_a,
+                        total_shots=self.shots_a + self.shots_b,
+                        first_player=self.first_player,
+                    )
+                self.turn = "a"
+
+    def _take_turn(self, engine: PlayerEngine, defender: Board) -> bool:
+        view = defender.public_view()
+        row, col = engine.choose_shot(view)
+        if not defender.in_bounds(row, col):
+            raise ValueError(f"{engine.name} chose a shot outside the board: {(row, col)}")
+
+        result = defender.receive_shot(row, col)
+        if result.already_tried:
+            raise ValueError(f"{engine.name} chose an already tried target: {(row, col)}")
+
+        engine.observe_result(result, defender.public_view())
+        if engine is self.engine_a:
+            self.shots_a += 1
+        else:
+            self.shots_b += 1
+        return defender.all_ships_sunk()
 
 
 class Pal17Engine(PlayerEngine):

@@ -115,3 +115,25 @@ intill ett säkert sänkt skepp, inklusive diagonalt.
 
 För att koppla in fler motorer, lägg till en `PlayerEngine`-klass i `battleship.py`
 och registrera den i `ENGINE_TYPES` i `app.py`.
+
+## Headless benchmark
+
+Benchmarken kör maskin mot maskin utan Tkinter, animation, sleep eller `after()`.
+Den använder samma `Board`, `receive_shot()`, `public_view()` och motor-API som UI:t.
+
+Exempel:
+
+```bash
+python benchmark.py --games 100000 --engine-a pal17 --engine-b random --seed 123
+```
+
+Andra användbara varianter:
+
+```bash
+python benchmark.py --games 10000 --engine-a pal17 --engine-b pal17 --seed 123
+python benchmark.py --games 10000 --engine-a random --engine-b random --start-policy random
+```
+
+Rapporten visar antal matcher, vinster per motor, statistik för vinnarens antal
+skott och matcher per sekund. Standardläget alternerar startspelare mellan A och
+B så jämna motorpar inte snedvrids av first-move bias.
