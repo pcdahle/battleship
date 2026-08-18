@@ -1,7 +1,7 @@
 import unittest
 
 from benchmark import run_benchmark
-from battleship import CellState, HeadlessMatch, Pal17Engine, PlayerEngine, ShotView
+from battleship import CellState, HeadlessMatch, Pal17Engine, PlayerEngine, ShotResult, ShotView
 
 
 def make_view(rows, cols, states=None):
@@ -54,6 +54,28 @@ class Pal17EngineTests(unittest.TestCase):
         self.assertNotIn((0, 1), scores)
         self.assertNotIn((1, 0), scores)
         self.assertIn((3, 3), scores)
+
+    def test_target_must_fit_at_least_one_remaining_ship(self):
+        view = make_view(1, 7, {(0, 3): CellState.MISS})
+        engine = Pal17Engine(seed=1)
+        engine.new_game(1, 7, [5])
+
+        scores = engine.score_targets(view)
+
+        self.assertEqual(scores, {})
+
+    def test_target_can_fit_shorter_remaining_ship_after_sunk_ship_removed(self):
+        view = make_view(1, 7, {(0, 3): CellState.MISS})
+        engine = Pal17Engine(seed=1)
+        engine.new_game(1, 7, [5, 3])
+        engine.observe_result(
+            result=ShotResult(0, 4, True, 1, ((0, 0), (0, 1), (0, 2), (0, 3), (0, 4))),
+            view=view,
+        )
+
+        scores = engine.score_targets(view)
+
+        self.assertEqual(set(scores), {(0, 0), (0, 1), (0, 2), (0, 4), (0, 5), (0, 6)})
 
 
 class RecordingEngine(PlayerEngine):

@@ -112,6 +112,9 @@ from battleship import Pal17Engine
 
 En tillåten ruta ligger på spelplanen, är inte redan beskjuten och ligger inte
 intill ett säkert sänkt skepp, inklusive diagonalt.
+Pal17 håller också reda på återstående skeppslängder via sänkta skepp. En ruta
+väljs bara om den ligger i en öppen horisontell eller vertikal sträcka som kan
+rymma minst det kortaste återstående skeppet.
 
 För att koppla in fler motorer, lägg till en `PlayerEngine`-klass i `battleship.py`
 och registrera den i `ENGINE_TYPES` i `app.py`.

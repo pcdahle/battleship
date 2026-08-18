@@ -297,6 +297,18 @@ class Pal17Engine(PlayerEngine):
 
     def __init__(self, seed: int | None = None):
         self.rng = random.Random(seed)
+        self.remaining_fleet: list[int] | None = None
+
+    def new_game(self, rows: int, cols: int, fleet: list[int]) -> None:
+        self.remaining_fleet = sorted(fleet, reverse=True)
+
+    def observe_result(self, result: ShotResult, view: ShotView) -> None:
+        if not result.sunk or self.remaining_fleet is None:
+            return
+
+        sunk_length = len(result.sunk_cells)
+        if sunk_length in self.remaining_fleet:
+            self.remaining_fleet.remove(sunk_length)
 
     def choose_shot(self, view: ShotView) -> Coord:
         scores = self.score_targets(view)
@@ -310,11 +322,23 @@ class Pal17Engine(PlayerEngine):
         return self.rng.choice(best_targets)
 
     def score_targets(self, view: ShotView) -> dict[Coord, int]:
-        scores = {
-            coord: 0
-            for coord in view.available_targets()
-            if self._is_allowed_target(view, coord)
-        }
+        shortest_remaining_ship = self._shortest_remaining_ship()
+        if shortest_remaining_ship is None:
+            scores = {
+                coord: 0
+                for coord in view.available_targets()
+                if self._is_allowed_target(view, coord)
+            }
+        elif shortest_remaining_ship <= 0:
+            scores = {}
+        else:
+            open_cells, horizontal_runs, vertical_runs = self._open_run_maps(view)
+            scores = {}
+            for row, col in view.available_targets():
+                if not open_cells[row][col]:
+                    continue
+                if max(horizontal_runs[row][col], vertical_runs[row][col]) >= shortest_remaining_ship:
+                    scores[(row, col)] = 0
 
         for component in self._hit_components(view):
             if len(component) == 1:
@@ -394,6 +418,68 @@ class Pal17Engine(PlayerEngine):
         if not (0 <= row < view.rows and 0 <= col < view.cols):
             return False
         if view.state_at(row, col) != CellState.UNKNOWN:
+            return False
+
+        for neighbor_row in range(row - 1, row + 2):
+            for neighbor_col in range(col - 1, col + 2):
+                if 0 <= neighbor_row < view.rows and 0 <= neighbor_col < view.cols:
+                    if view.state_at(neighbor_row, neighbor_col) == CellState.SUNK:
+                        return False
+
+        return True
+
+    def _shortest_remaining_ship(self) -> int | None:
+        if self.remaining_fleet is None:
+            return None
+        if not self.remaining_fleet:
+            return 0
+        return min(self.remaining_fleet)
+
+    def _open_run_maps(
+        self,
+        view: ShotView,
+    ) -> tuple[list[list[bool]], list[list[int]], list[list[int]]]:
+        open_cells = [
+            [
+                self._is_open_for_remaining_ship(view, row, col)
+                for col in range(view.cols)
+            ]
+            for row in range(view.rows)
+        ]
+        horizontal_runs = [[0 for _col in range(view.cols)] for _row in range(view.rows)]
+        vertical_runs = [[0 for _col in range(view.cols)] for _row in range(view.rows)]
+
+        for row in range(view.rows):
+            col = 0
+            while col < view.cols:
+                if not open_cells[row][col]:
+                    col += 1
+                    continue
+                start = col
+                while col < view.cols and open_cells[row][col]:
+                    col += 1
+                run_length = col - start
+                for run_col in range(start, col):
+                    horizontal_runs[row][run_col] = run_length
+
+        for col in range(view.cols):
+            row = 0
+            while row < view.rows:
+                if not open_cells[row][col]:
+                    row += 1
+                    continue
+                start = row
+                while row < view.rows and open_cells[row][col]:
+                    row += 1
+                run_length = row - start
+                for run_row in range(start, row):
+                    vertical_runs[run_row][col] = run_length
+
+        return open_cells, horizontal_runs, vertical_runs
+
+    def _is_open_for_remaining_ship(self, view: ShotView, row: int, col: int) -> bool:
+        state = view.state_at(row, col)
+        if state in (CellState.MISS, CellState.SUNK):
             return False
 
         for neighbor_row in range(row - 1, row + 2):
