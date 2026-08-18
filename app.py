@@ -33,6 +33,8 @@ class GameSession:
         self.right_engine = right_engine
         self.turn = "human" if mode == 1 else "left_ai"
         self.game_over = False
+        self.left_moves = 0
+        self.right_moves = 0
 
         if self.left_engine:
             self.left_engine.new_game(rows, cols, fleet)
@@ -161,8 +163,20 @@ class BattleshipApp(tk.Tk):
         controls.pack(side=tk.TOP, fill=tk.X)
 
         ttk.Label(controls, text="Läge").pack(side=tk.LEFT)
-        ttk.Radiobutton(controls, text="Människa mot maskin", variable=self.mode_var, value=1).pack(side=tk.LEFT, padx=(6, 10))
-        ttk.Radiobutton(controls, text="Maskin mot maskin", variable=self.mode_var, value=2).pack(side=tk.LEFT, padx=(0, 18))
+        ttk.Radiobutton(
+            controls,
+            text="Människa mot maskin",
+            variable=self.mode_var,
+            value=1,
+            command=self._sync_engine_controls,
+        ).pack(side=tk.LEFT, padx=(6, 10))
+        ttk.Radiobutton(
+            controls,
+            text="Maskin mot maskin",
+            variable=self.mode_var,
+            value=2,
+            command=self._sync_engine_controls,
+        ).pack(side=tk.LEFT, padx=(0, 18))
 
         ttk.Label(controls, text="Rader").pack(side=tk.LEFT)
         ttk.Spinbox(controls, from_=1, to=100, textvariable=self.rows_var, width=5).pack(side=tk.LEFT, padx=(4, 10))
@@ -174,36 +188,39 @@ class BattleshipApp(tk.Tk):
         ttk.Button(controls, text="Nytt spel", command=self.new_game).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(controls, text="Start/paus", command=self.toggle_auto).pack(side=tk.LEFT)
 
-        engines = ttk.Frame(self, padding=(10, 0, 10, 10))
-        engines.pack(side=tk.TOP, fill=tk.X)
+        self.engines_container = ttk.Frame(self, padding=(10, 0, 10, 10))
+        self.engines_container.pack(side=tk.TOP, fill=tk.X)
         engine_names = tuple(ENGINE_TYPES)
 
-        ttk.Label(engines, text="Människa mot maskin").pack(side=tk.LEFT)
+        self.mode1_engine_frame = ttk.Frame(self.engines_container)
+        ttk.Label(self.mode1_engine_frame, text="Maskin").pack(side=tk.LEFT)
         ttk.Combobox(
-            engines,
+            self.mode1_engine_frame,
             textvariable=self.human_vs_ai_engine_var,
             values=engine_names,
             state="readonly",
             width=10,
-        ).pack(side=tk.LEFT, padx=(6, 16))
+        ).pack(side=tk.LEFT, padx=(6, 0))
 
-        ttk.Label(engines, text="Maskin A").pack(side=tk.LEFT)
+        self.mode2_engine_frame = ttk.Frame(self.engines_container)
+        ttk.Label(self.mode2_engine_frame, text="Maskin A").pack(side=tk.LEFT)
         ttk.Combobox(
-            engines,
+            self.mode2_engine_frame,
             textvariable=self.machine_a_engine_var,
             values=engine_names,
             state="readonly",
             width=10,
         ).pack(side=tk.LEFT, padx=(6, 16))
 
-        ttk.Label(engines, text="Maskin B").pack(side=tk.LEFT)
+        ttk.Label(self.mode2_engine_frame, text="Maskin B").pack(side=tk.LEFT)
         ttk.Combobox(
-            engines,
+            self.mode2_engine_frame,
             textvariable=self.machine_b_engine_var,
             values=engine_names,
             state="readonly",
             width=10,
         ).pack(side=tk.LEFT, padx=(6, 0))
+        self._sync_engine_controls()
 
         boards = ttk.Frame(self, padding=(10, 0, 10, 10))
         boards.pack(fill=tk.BOTH, expand=True)
@@ -264,14 +281,25 @@ class BattleshipApp(tk.Tk):
         if not self.session:
             return
         mode = self.session.mode
-        self.left_canvas.title = "Spelarens bräde" if mode == 1 else "Maskin A"
-        self.right_canvas.title = "Maskinens bräde" if mode == 1 else "Maskin B"
+        self._sync_engine_controls()
+        left_title = "Spelarens bräde" if mode == 1 else "Maskin A"
+        right_title = "Maskinens bräde" if mode == 1 else "Maskin B"
+        self.left_canvas.title = f"{left_title} - drag: {self.session.left_moves}"
+        self.right_canvas.title = f"{right_title} - drag: {self.session.right_moves}"
         self.left_canvas.set_board(self.session.left_board, reveal_ships=True, interactive=False)
         self.right_canvas.set_board(
             self.session.right_board,
             reveal_ships=(mode == 2),
             interactive=(mode == 1 and self.session.turn == "human" and not self.session.game_over),
         )
+
+    def _sync_engine_controls(self) -> None:
+        self.mode1_engine_frame.pack_forget()
+        self.mode2_engine_frame.pack_forget()
+        if int(self.mode_var.get()) == 1:
+            self.mode1_engine_frame.pack(side=tk.LEFT)
+        else:
+            self.mode2_engine_frame.pack(side=tk.LEFT)
 
     def human_shot(self, row: int, col: int) -> None:
         session = self.session
@@ -283,6 +311,7 @@ class BattleshipApp(tk.Tk):
             self.status_var.set("Den rutan är redan skjuten på.")
             return
 
+        session.left_moves += 1
         self.status_var.set(self._describe_result("Du", result))
         self._sync_canvases()
         if self._check_winner("Du", session.right_board):
@@ -299,6 +328,7 @@ class BattleshipApp(tk.Tk):
         row, col = session.right_engine.choose_shot(session.left_board.public_view())
         result = session.left_board.receive_shot(row, col)
         session.right_engine.observe_result(result, session.left_board.public_view())
+        session.right_moves += 1
         self.status_var.set(self._describe_result("Maskinen", result))
         self._sync_canvases()
 
@@ -334,6 +364,10 @@ class BattleshipApp(tk.Tk):
         row, col = attacker.choose_shot(defender.public_view())
         result = defender.receive_shot(row, col)
         attacker.observe_result(result, defender.public_view())
+        if session.turn == "left_ai":
+            session.left_moves += 1
+        else:
+            session.right_moves += 1
         self.status_var.set(self._describe_result(attacker_name, result))
         self._sync_canvases()
 
