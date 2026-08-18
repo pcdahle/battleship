@@ -140,3 +140,6 @@ python benchmark.py --games 10000 --engine-a random --engine-b random --start-po
 Rapporten visar antal matcher, vinster per motor, statistik för vinnarens antal
 skott och matcher per sekund. Standardläget alternerar startspelare mellan A och
 B så jämna motorpar inte snedvrids av first-move bias.
+Under körningen skrivs en progressrad med löpande medelvärde var 1000:e match.
+Det kan ändras eller stängas av med `--progress-every`, till exempel
+`--progress-every 0`.

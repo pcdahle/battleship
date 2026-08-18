@@ -1,6 +1,7 @@
 import unittest
+from collections import Counter
 
-from benchmark import run_benchmark
+from benchmark import BenchmarkSummary, format_summary, run_benchmark
 from battleship import CellState, HeadlessMatch, Pal17Engine, PlayerEngine, ShotResult, ShotView
 
 
@@ -167,6 +168,19 @@ class HeadlessMatchTests(unittest.TestCase):
 
         self.assertEqual(first.wins, second.wins)
         self.assertEqual(first.winner_shots, second.winner_shots)
+
+    def test_summary_formats_median_as_integer(self):
+        summary = BenchmarkSummary(
+            games=2,
+            wins=Counter({"a": 2}),
+            winner_shots=[48, 49],
+            elapsed_seconds=1.0,
+        )
+
+        text = format_summary(summary, "pal17", "random")
+
+        self.assertIn("  median: 48", text)
+        self.assertNotIn("  median: 48.50", text)
 
 
 if __name__ == "__main__":

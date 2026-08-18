@@ -71,6 +71,7 @@ def run_benchmark(
     seed: int | None,
     start_policy: str,
     result_hook: Callable[[MatchResult], None] | None = None,
+    progress_every: int = 0,
 ) -> BenchmarkSummary:
     if games <= 0:
         raise ValueError("games must be greater than zero")
@@ -105,6 +106,14 @@ def run_benchmark(
         winner_shots.append(result.winner_shots)
         if result_hook:
             result_hook(result)
+        games_played = game_index + 1
+        if progress_every > 0 and games_played % progress_every == 0:
+            mean_shots = statistics.fmean(winner_shots)
+            print(
+                f"Progress: {games_played}/{games} games, "
+                f"mean winner shots: {mean_shots:.2f}",
+                flush=True,
+            )
 
     elapsed = time.perf_counter() - started
     return BenchmarkSummary(
@@ -127,7 +136,7 @@ def format_summary(summary: BenchmarkSummary, engine_a_name: str, engine_b_name:
             f"Engine B ({engine_b_name}) wins: {summary.wins['b']}",
             "Winner shots:",
             f"  mean: {statistics.fmean(shots):.2f}",
-            f"  median: {statistics.median(shots):.2f}",
+            f"  median: {statistics.median(shots):.0f}",
             f"  min: {min(shots)}",
             f"  max: {max(shots)}",
             f"  stdev: {stdev:.2f}",
@@ -149,6 +158,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fleet", type=parse_fleet, default=list(DEFAULT_FLEET))
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=1000,
+        help="Print running mean after this many games. Use 0 to disable.",
+    )
+    parser.add_argument(
         "--start-policy",
         choices=("alternate", "random", "a"),
         default="alternate",
@@ -169,6 +184,7 @@ def main() -> None:
         engine_b_name=args.engine_b,
         seed=args.seed,
         start_policy=args.start_policy,
+        progress_every=args.progress_every,
     )
     print(format_summary(summary, args.engine_a, args.engine_b))
 
